@@ -10,11 +10,12 @@ export interface ExpenseRecord {
 export async function analyzeStatementImages(base64Images: string[], apiKey: string): Promise<ExpenseRecord[]> {
   if (!apiKey) throw new Error("API Key is missing");
   
-  // Use Vite proxy locally. On GitHub Pages, use CORS Anywhere which supports large payloads and headers.
-  const isDev = import.meta.env.DEV;
-  const fetchUrl = isDev 
+  // Always hit our Vercel Serverless Function proxy route instead of directly hitting Ollama
+  // When running locally, Vite proxy will handle /api/chat if configured, 
+  // or you can test by running `vercel dev` locally.
+  const fetchUrl = import.meta.env.DEV 
     ? `${window.location.origin}/api/ollama/api/chat`
-    : `https://cors-anywhere.herokuapp.com/https://ollama.com/api/chat`;
+    : `https://ankur-expense-tracker-api.vercel.app/api/chat`; // Replace with your Vercel domain later, or just /api/chat if deploying full app
 
   const prompt = `
   You are an expert accountant. Read the provided credit card statement image(s).
@@ -35,45 +36,34 @@ export async function analyzeStatementImages(base64Images: string[], apiKey: str
   ]
   `;
 
-  let response;
-  try {
-    response = await fetch(fetchUrl, {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-          model: 'qwen3-vl:235b-instruct',
-          messages: [{ 
-              role: 'user', 
-              content: prompt,
-              images: base64Images
-          }],
-          format: 'json',
-          stream: false,
-          options: { temperature: 0.1 }
-      })
-    });
-  } catch (err: any) {
-    if (!isDev) {
-      throw new Error(`CORS Error: Please visit https://cors-anywhere.herokuapp.com/corsdemo to request temporary proxy access, then try again.`);
-    }
-    throw err;
-  }
-
-  if (response.status === 403 && !isDev) {
-    throw new Error(`Proxy Access Required: Please visit https://cors-anywhere.herokuapp.com/corsdemo and click "Request temporary access to the demo server", then reload this page.`);
-  }
+  const response = await fetch(fetchUrl, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}` // The Vercel function extracts this and passes it to Ollama
+    },
+    body: JSON.stringify({
+        model: 'qwen3-vl:235b-instruct',
+        messages: [{ 
+            role: 'user', 
+            content: prompt,
+            images: base64Images
+        }],
+        format: 'json',
+        stream: false,
+        options: { temperature: 0.1 }
+    })
+  });
 
   if (!response.ok) {
-    throw new Error(`Ollama API Error: ${response.status} ${response.statusText}`);
+    const errObj = await response.json().catch(() => ({}));
+    throw new Error(errObj.error || `Proxy API Error: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
 
   try {
-      let content = data.message.content.trim();
+      let content = data.message?.content?.trim() || "";
       const arrayMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
       if (arrayMatch) {
           content = arrayMatch[0];
@@ -88,7 +78,7 @@ export async function analyzeStatementImages(base64Images: string[], apiKey: str
           client_name: item.client_name || ''
       }));
   } catch (e) {
-      console.error("Failed to parse JSON response from Ollama", e, "\nRaw Output:", data.message.content);
+      console.error("Failed to parse JSON response", e, "\nRaw Output:", data);
       return [];
   }
 }
