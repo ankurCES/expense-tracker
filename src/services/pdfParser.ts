@@ -42,11 +42,12 @@ export async function convertPdfToImageBase64(file: File): Promise<string[]> {
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         
+        // @ts-ignore
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
         // Strip out the data:image/png;base64, prefix for Ollama
         const base64 = canvas.toDataURL('image/png').split(',')[1];
-        images.push(base64);
+        if (base64) images.push(base64);
     }
     
     return images;
