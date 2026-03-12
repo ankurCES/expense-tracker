@@ -10,11 +10,11 @@ export interface ExpenseRecord {
 export async function analyzeStatementImages(base64Images: string[], apiKey: string): Promise<ExpenseRecord[]> {
   if (!apiKey) throw new Error("API Key is missing");
   
-  // In development, use Vite proxy. In production (GitHub Pages), use a CORS proxy to reach Ollama Cloud
+  // Use Vite proxy locally. On GitHub Pages, use CORS Anywhere which supports large payloads and headers.
   const isDev = import.meta.env.DEV;
   const fetchUrl = isDev 
     ? `${window.location.origin}/api/ollama/api/chat`
-    : `https://corsproxy.io/?${encodeURIComponent('https://ollama.com/api/chat')}`;
+    : `https://cors-anywhere.herokuapp.com/https://ollama.com/api/chat`;
 
   const prompt = `
   You are an expert accountant. Read the provided credit card statement image(s).
@@ -35,24 +35,36 @@ export async function analyzeStatementImages(base64Images: string[], apiKey: str
   ]
   `;
 
-  const response = await fetch(fetchUrl, {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-        model: 'qwen3-vl:235b-instruct',
-        messages: [{ 
-            role: 'user', 
-            content: prompt,
-            images: base64Images
-        }],
-        format: 'json',
-        stream: false,
-        options: { temperature: 0.1 }
-    })
-  });
+  let response;
+  try {
+    response = await fetch(fetchUrl, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+          model: 'qwen3-vl:235b-instruct',
+          messages: [{ 
+              role: 'user', 
+              content: prompt,
+              images: base64Images
+          }],
+          format: 'json',
+          stream: false,
+          options: { temperature: 0.1 }
+      })
+    });
+  } catch (err: any) {
+    if (!isDev) {
+      throw new Error(`CORS Error: Please visit https://cors-anywhere.herokuapp.com/corsdemo to request temporary proxy access, then try again.`);
+    }
+    throw err;
+  }
+
+  if (response.status === 403 && !isDev) {
+    throw new Error(`Proxy Access Required: Please visit https://cors-anywhere.herokuapp.com/corsdemo and click "Request temporary access to the demo server", then reload this page.`);
+  }
 
   if (!response.ok) {
     throw new Error(`Ollama API Error: ${response.status} ${response.statusText}`);
@@ -62,7 +74,6 @@ export async function analyzeStatementImages(base64Images: string[], apiKey: str
 
   try {
       let content = data.message.content.trim();
-      
       const arrayMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
       if (arrayMatch) {
           content = arrayMatch[0];
