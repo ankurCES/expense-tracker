@@ -10,12 +10,11 @@ export interface ExpenseRecord {
 export async function analyzeStatementImages(base64Images: string[], apiKey: string): Promise<ExpenseRecord[]> {
   if (!apiKey) throw new Error("API Key is missing");
   
-  // Always hit our Vercel Serverless Function proxy route instead of directly hitting Ollama
-  // When running locally, Vite proxy will handle /api/chat if configured, 
-  // or you can test by running `vercel dev` locally.
+  // If hosted on Vercel, the frontend and the backend share the exact same origin!
+  // No CORS issues ever again.
   const fetchUrl = import.meta.env.DEV 
     ? `${window.location.origin}/api/ollama/api/chat`
-    : `https://ankur-expense-tracker-api.vercel.app/api/chat`; // Replace with your Vercel domain later, or just /api/chat if deploying full app
+    : `/api/chat`; // Hits the Vercel Serverless Function
 
   const prompt = `
   You are an expert accountant. Read the provided credit card statement image(s).
