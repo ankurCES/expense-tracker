@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama';
 
-const API_KEY = "dd4800a9c48c431ba4ce6e0b5c63ce64.vtmKnUSIf9XDlvD37EJCiXXb";
+const API_KEY = "random";
 
 const ollama = new Ollama({ 
     host: 'https://ollama.com',
